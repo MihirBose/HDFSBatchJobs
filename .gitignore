@@ -1,0 +1,14 @@
+target/
+project/target/
+src/data/non_event_agg_output/
+src/data/output_data/
+src/data/processed_data/
+src/data/checkpoints/
+.project
+.idea/
+*.log
+*.class
+*.jar
+*.cache
+*.crc
+.DS_Store

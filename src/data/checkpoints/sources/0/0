@@ -1,0 +1,3 @@
+v1
+{"path":"file:///Users/mihirbose/IdeaProjects/HDFSBatchJob/src/data/csv_source_data/events_1.csv","timestamp":1741547606120,"batchId":0}
+{"path":"file:///Users/mihirbose/IdeaProjects/HDFSBatchJob/src/data/csv_source_data/events_2.csv","timestamp":1741547606121,"batchId":0}
