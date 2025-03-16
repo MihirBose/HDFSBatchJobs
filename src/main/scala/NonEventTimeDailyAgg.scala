@@ -3,7 +3,16 @@ import org.apache.spark.sql.streaming.Trigger
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types._
 
-import scala.jdk.CollectionConverters.{IterableHasAsJava, IteratorHasAsScala}
+/**
+ * This application represents a spark batch job that aggregates data in micro-batch manner using
+ * Spark's Structured Streaming.
+ *
+ * It reads only a specific number of files(maxFilesPerTrigger) from source (Any file source like HDFS or local
+ * for testing), aggregates the data of the current micro-batch with the result set of the aggregations of all the
+ * micro batches so far, as we are using the 'complete' mode.
+ *
+ * That output is then sent to a method using forEachBatch which writes the result to an output directory.
+ */
 
 object NonEventTimeDailyAgg {
 
@@ -14,23 +23,23 @@ object NonEventTimeDailyAgg {
       .config("spark.sql.shuffle.partitions", "4") // Reduce number of shuffle partitions
       .getOrCreate()
 
-      import spark.implicits._
+    import spark.implicits._
 
-      // ✅ Define Schema for CSV Data
-      val eventSchema = new StructType()
-        .add("user_id", StringType)
-        .add("session_id", StringType)
-        .add("pageview_id", StringType)
-        .add("session_duration", LongType)
-        .add("event_type", StringType)
-        .add("event_time", StringType)
+    // ✅ Define Schema for CSV Data
+    val eventSchema = new StructType()
+      .add("user_id", StringType)
+      .add("session_id", StringType)
+      .add("pageview_id", StringType)
+      .add("session_duration", LongType)
+      .add("event_type", StringType)
+      .add("event_time", StringType)
 
     // ✅ Read CSV files in micro-batches
     val inputDF = spark.readStream
       .option("header", "true")
       .schema(eventSchema)
-      .option("maxFilesPerTrigger", 2)  // ✅ Read 2 files per micro-batch
-      .csv("/Users/mihirbose/IdeaProjects/HDFSBatchJobs/src/data/csv_source_data")
+      .option("maxFilesPerTrigger", 1)
+      .csv("/Users/mihirbose/IdeaProjects/HDFSBatchJobs/src/data/test_data")
       .repartition(2) // Control parallelism
 
 
@@ -52,10 +61,6 @@ object NonEventTimeDailyAgg {
     // 5. Define foreachBatch function to write Parquet files partitioned by event_date.
     //    We join back with a static DataFrame that holds (user_id, session_id, event_date)
     def writeToParquet(batchDF: org.apache.spark.sql.DataFrame, batchId: Long): Unit = {
-      if (batchDF.isEmpty) {
-        println(s"Stopping query as batch $batchId contains no data.")
-        spark.streams.active.foreach(_.stop()) // Stop all active queries
-      } else {
         // Get today's date
         val today = spark.sql("SELECT current_date()").first().getDate(0).toString
 
@@ -63,11 +68,11 @@ object NonEventTimeDailyAgg {
         val outputPath = "/Users/mihirbose/IdeaProjects/HDFSBatchJobs/src/data/non_event_agg_output"
         batchDF.write
           .mode("overwrite")
-          .parquet(s"$outputPath/$today/batch_$batchId")
+          .parquet(s"$outputPath/$today")
 
         println(s"✅ Wrote batch $batchId to $outputPath partitioned by event_date")
       }
-    }
+
 
     // ✅ Write to plain Parquet files (NO saveAsTable, just files)
     val query = aggregatedDF
@@ -78,11 +83,10 @@ object NonEventTimeDailyAgg {
         writeToParquet(batchDF, batchId)
       }) // ✅ Custom batch processing
       .option("checkpointLocation", "/Users/mihirbose/IdeaProjects/HDFSBatchJobs/src/data/checkpoints") // Needed for state tracking
-      .trigger(Trigger.ProcessingTime("5 seconds"))
-//      .trigger(Trigger.AvailableNow())
+      .trigger(Trigger.AvailableNow())
       .start()
 
-    query.awaitTermination(60000)
+    query.awaitTermination()
 
 //    // Keep Spark UI running for 10 minutes (600000 milliseconds)
 //    Thread.sleep(6000000)
