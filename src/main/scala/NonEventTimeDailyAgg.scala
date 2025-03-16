@@ -25,7 +25,7 @@ object NonEventTimeDailyAgg {
 
     import spark.implicits._
 
-    // ✅ Define Schema for CSV Data
+    // Define Schema for CSV Data
     val eventSchema = new StructType()
       .add("user_id", StringType)
       .add("session_id", StringType)
@@ -34,12 +34,12 @@ object NonEventTimeDailyAgg {
       .add("event_type", StringType)
       .add("event_time", StringType)
 
-    // ✅ Read CSV files in micro-batches
+    // Read CSV files in micro-batches
     val inputDF = spark.readStream
       .option("header", "true")
       .schema(eventSchema)
-      .option("maxFilesPerTrigger", 1)
-      .csv("/Users/mihirbose/IdeaProjects/HDFSBatchJobs/src/data/test_data")
+      .option("maxFilesPerTrigger", 2)
+      .csv("/Users/mihirbose/IdeaProjects/HDFSBatchJobs/src/data/csv_source_data")
       .repartition(2) // Control parallelism
 
 
@@ -70,19 +70,20 @@ object NonEventTimeDailyAgg {
           .mode("overwrite")
           .parquet(s"$outputPath/$today")
 
-        println(s"✅ Wrote batch $batchId to $outputPath partitioned by event_date")
+        println(s"Wrote batch $batchId to $outputPath")
       }
 
 
-    // ✅ Write to plain Parquet files (NO saveAsTable, just files)
+    // Write to plain Parquet files (NO saveAsTable, just files)
     val query = aggregatedDF
       .coalesce(1)
       .writeStream
       .outputMode("complete") // Full aggregation per batch
       .foreachBatch((batchDF: org.apache.spark.sql.DataFrame, batchId: Long) => {
         writeToParquet(batchDF, batchId)
-      }) // ✅ Custom batch processing
-      .option("checkpointLocation", "/Users/mihirbose/IdeaProjects/HDFSBatchJobs/src/data/checkpoints") // Needed for state tracking
+      }) // Custom batch processing
+      .option("checkpointLocation",
+        "/Users/mihirbose/IdeaProjects/HDFSBatchJobs/src/data/checkpoints/non_event_time_checkpoints") // Needed for state tracking
       .trigger(Trigger.AvailableNow())
       .start()
 
